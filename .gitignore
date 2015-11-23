@@ -1,2 +1,6 @@
 .ipynb_checkpoints/
+*.json
+*.yaml
+*.pyc
+*.csv
 
