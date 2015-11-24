@@ -2,6 +2,14 @@
 
 # IssueType (bug, story, epic), Status (lane), Summary, Description, Issue ID, Parent ID, Reporter
 
+def map_to_jira_ticket(trello_ticket):
+    return {'IssueType': 'Story' if trello_ticket['type'] == 'card' else 'Sub-task',
+            'Summary': trello_ticket['name'],
+            'Description': trello_ticket['desc'],
+            'Reporter': trello_ticket['created_by'],
+            'Status': trello_ticket['list'],
+            'Issue ID': trello_ticket['export_id'],
+            'Parent ID': trello_ticket['parent_export_id']}
 
 class CsvEntry:
     def __init__(self, issue_type, status, summary, description, issue_id=None, parent_id=None):

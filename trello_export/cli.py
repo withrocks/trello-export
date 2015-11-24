@@ -1,19 +1,19 @@
 import click
 from trello_export.main import TrelloExport
+from jira_csv import map_to_jira_ticket
 
 
 @click.group()
-@click.option('--config')
 @click.pass_context
-def cli(ctx, config):
+def cli(ctx):
     pass
 
 
-@cli.command('to-csv')
+@cli.command('to-jira-csv')
 @click.argument('export')
 @click.argument('mapping')
 @click.pass_context
-def to_csv(ctx, export, mapping):
+def to_jira_csv(ctx, export, mapping):
     """
     Export the json to a CSV file that can be used to import
     into JIRA for example.
@@ -22,8 +22,21 @@ def to_csv(ctx, export, mapping):
         print msg
     trello = TrelloExport(export, mapping, notify)
 
-    for line in trello.to_csv_mapped():
-        print line
+    # TODO: All issues are currently stories, mark as Bug
+    # if they have the label bug
+    print "IssueType,Summary,Description,Reporter,Status, Issue ID, Parent ID"
+    for ticket in trello.to_csv_mapped():
+        jira_ticket = map_to_jira_ticket(ticket)
+        line = [jira_ticket['IssueType'],
+                jira_ticket['Summary'],
+                jira_ticket['Description'],
+                jira_ticket['Reporter'],
+                jira_ticket['Status'],
+                jira_ticket['Issue ID'],
+                jira_ticket['Parent ID']]
+        line = map(unicode, line)
+        print u",".join(line)
+
 
 
 

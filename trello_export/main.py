@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 import json
 import yaml
+import copy
 
 
 class TrelloExport:
@@ -14,6 +15,7 @@ class TrelloExport:
             self.mapping = yaml.load(f)
             self.user_mapping = self.mapping['users']
             self.list_mapping = self.mapping['lists']
+            self.labels_mapping = self.mapping['labels']
 
         self.members_indexed_by_id = {
             item['id']: item for item in self.data['members']}
@@ -25,31 +27,59 @@ class TrelloExport:
         self.lists_indexed_by_id = {
             item['id']: item for item in self.data['lists']}
 
-    def to_csv(self):
+        self.checklists_indexed_by_id = {
+            checklist['id']: checklist for checklist in self.data['checklists']}
+
+    def to_csv(self, expand_checklists=True):
         """
         Maps the file to a CSV, without applying mapping
 
         The CSV includes all cards and all checklists
         """
+        export_id = 0
         for card in self.data['cards']:
-            yield {
-                    'type': 'card',
-                    'name': card['name'],
-                    'desc': card['desc'],
-                    'created_by': self.get_card_creator(card['id']),
-                    'list_id': card['idList']
-                  }
+            export_id += 1
+            ret = dict()
+            ret['list_id'] = card['idList']
+            ret['type'] = 'card'
+            ret['created_by'] = self.get_card_creator(card['id'])
+            ret['label'] = self.flatten_card_labels(card)
+            ret['export_id'] = export_id
+            ret['parent_export_id'] = None
+            ret['name'] = card['name']
+            ret['desc'] = card['desc']
+
+            yield ret
+
+            if expand_checklists:
+                for checklist_item in self.enumerate_check_items(card, ret):
+                    yield checklist_item
+
+    def enumerate_check_items(self, card, card_exp):
+        for checklist_id in card['idChecklists']:
+            checklist = self.checklists_indexed_by_id[checklist_id]
+            for item in checklist['checkItems']:
+                yield {'type': 'check_item',
+                       'name': item['name'],
+                       'desc': '',
+                       'created_by': card_exp['created_by'],
+                       'export_id': None,
+                       'parent_export_id': card_exp['export_id'],
+                       'list_id': card_exp['list_id'],
+                       'label': ''}
 
     def to_csv_mapped(self):
-        # TODO: Apply mapping
+        # TODO: Export columns conditionally, such as if
+        # label `a`, then column `x`=`b`
         for entry in self.to_csv():
-            yield {
-                'type': entry['type'],
-                'name': entry['name'],
-                'desc': entry['desc'],
-                'created_by': self.map_trello_user(entry['created_by']),
-                'list': self.map_trello_list(entry['list_id'])
-            }
+            ret = copy.deepcopy(entry)
+            ret['created_by'] = self.map_trello_user(entry['created_by'])
+            ret['list'] = self.map_trello_list(entry['list_id'])
+            ret['label'] = self.map_trello_label(entry['label'])
+            yield ret
+
+    def flatten_card_labels(self, card):
+        return ",".join(item['name'] for item in card['labels'])
 
     def map_trello_user(self, trello_user_id):
         field = self.mapping['users_mapping_from_field']
@@ -61,26 +91,13 @@ class TrelloExport:
         key = self.lists_indexed_by_id[trello_list_id][field]
         return self.list_mapping.get(key, key)
 
+    def map_trello_label(self, trello_label):
+        # TODO: Handle a list of labels
+        return self.labels_mapping.get(trello_label, trello_label)
+
     def get_card_creator(self, card_id):
         return self.card_creators_indexed_by_card_id[card_id]
 
     def get_list_name(self, list_id):
         return self.lists_indexed_by_id[list_id]['name']
 
-
-"""
-csv = CsvGenerator()
-with open('report.csv', 'w') as outfile:
-    outfile.truncate()
-    for card in data["cards"]:
-        if not card['closed']:
-            #print u"name={},desc={},reported={}".format(
-            #    card['name'], card['desc'], cards_created_by_user[card['id']])
-
-            jira_status = get_jira_status_from_trello_list(card['idList'])
-            # TODO: All stories for now, need to pick up bug labels
-            entry = CsvEntry('story', list_to_jira_status[card['idList']], card['name'], card['desc'])
-
-            outfile.write(entry.issue_type)
-            outfile.write(u'\n')
-"""
