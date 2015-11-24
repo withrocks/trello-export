@@ -1,51 +1,74 @@
 #!/usr/bin/env python
-
 import json
 import yaml
 
-from jira_csv import CsvGenerator, CsvEntry
 
-print "Loading export file from Trello, at export.json..."
-with open("export.json") as f:
-    data = json.load(f)
+class TrelloExport:
+    def __init__(self, export_file_path, mapping_file_path, user_msg):
+        user_msg("Loading export file from Trello from '{}'...".format(export_file_path))
+        with open(export_file_path) as f:
+            self.data = json.load(f)
+
+        user_msg("Load mapping file from '{}'...".format(mapping_file_path))
+        with open(mapping_file_path) as f:
+            self.mapping = yaml.load(f)
+            self.user_mapping = self.mapping['users']
+            self.list_mapping = self.mapping['lists']
+
+        self.members_indexed_by_id = {
+            item['id']: item for item in self.data['members']}
+
+        self.card_creators_indexed_by_card_id = {
+            item['data']['card']['id']: item['idMemberCreator']
+            for item in self.data['actions'] if item['type'] == 'createCard'}
+
+        self.lists_indexed_by_id = {
+            item['id']: item for item in self.data['lists']}
+
+    def to_csv(self):
+        """
+        Maps the file to a CSV, without applying mapping
+
+        The CSV includes all cards and all checklists
+        """
+        for card in self.data['cards']:
+            yield {
+                    'type': 'card',
+                    'name': card['name'],
+                    'desc': card['desc'],
+                    'created_by': self.get_card_creator(card['id']),
+                    'list_id': card['idList']
+                  }
+
+    def to_csv_mapped(self):
+        # TODO: Apply mapping
+        for entry in self.to_csv():
+            yield {
+                'type': entry['type'],
+                'name': entry['name'],
+                'desc': entry['desc'],
+                'created_by': self.map_trello_user(entry['created_by']),
+                'list': self.map_trello_list(entry['list_id'])
+            }
+
+    def map_trello_user(self, trello_user_id):
+        field = self.mapping['users_mapping_from_field']
+        key = self.members_indexed_by_id[trello_user_id][field]
+        return self.user_mapping.get(key, key)
+
+    def map_trello_list(self, trello_list_id):
+        field = self.mapping['lists_mapping_from_field']
+        key = self.lists_indexed_by_id[trello_list_id][field]
+        return self.list_mapping.get(key, key)
+
+    def get_card_creator(self, card_id):
+        return self.card_creators_indexed_by_card_id[card_id]
+
+    def get_list_name(self, list_id):
+        return self.lists_indexed_by_id[list_id]['name']
 
 
-# Get the trello lists, indexed by the list id
-trello_lists = {item["id"]: item for item in data["lists"]}
-print "Trello lists {}".format(len(trello_lists))
-
-print "Load mapping file..."
-with open('mapping.yaml') as f:
-    mapping = yaml.load(f)
-
-# Ensure your mapping file has trello users (full names) mapped to jira usernames:
-trello_user_to_jira = mapping['trello_user_to_jira']
-
-# Now get a list of all members in trello, with mapping data:
-print mapping
-
-members = {member['id']: trello_user_to_jira[member['fullName']] for member in data["members"]}
-print members
-
-# Now, we're interested in the actions, since they show who created the cards,
-# which we will map to Reported:
-cards_created_by_user = {item['data']['card']['id']: members[item['idMemberCreator']]
-                         for item in data['actions'] if item['type'] == 'createCard'}
-
-# Now we got all "Reported by" in all cards
-trello_list_to_jira_status = mapping['trello_list_to_jira_status']
-print trello_list_to_jira_status
-
-def get_jira_status_from_trello_list(list_id):
-    if list_id in trello_list_to_jira_status:
-        return trello_list_to_jira_status[list_id]
-
-
-list_to_jira_status = {item['id']: get_jira_status_from_trello_list(item['name']) for item in data['lists']}
-print list_to_jira_status
-
-
-
+"""
 csv = CsvGenerator()
 with open('report.csv', 'w') as outfile:
     outfile.truncate()
@@ -60,3 +83,4 @@ with open('report.csv', 'w') as outfile:
 
             outfile.write(entry.issue_type)
             outfile.write(u'\n')
+"""

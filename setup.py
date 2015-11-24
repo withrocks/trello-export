@@ -26,7 +26,7 @@ setup(
 
     keywords='development deployment release',
     packages=find_packages(exclude=['contrib', 'docs', 'tests']),
-    install_requires=['click'],
+    install_requires=['click', 'pyyaml'],
 
     extras_require={
         'dev': [],
