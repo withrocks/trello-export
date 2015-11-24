@@ -3,4 +3,6 @@
 *.yaml
 *.pyc
 *.csv
+*.swp
+*.egg-info/
 
