@@ -1,6 +1,6 @@
 import click
 from trello_export.main import TrelloExport
-from jira_csv import map_to_jira_ticket
+from jira_csv import map_to_jira_ticket, format_output_column
 
 
 @click.group()
@@ -12,20 +12,21 @@ def cli(ctx):
 @cli.command('to-jira-csv')
 @click.argument('export')
 @click.argument('mapping')
+@click.option('--ignore', help='Comma separated list of Trello lists to ignore')
+@click.option('--start', help='First sequence number for exported IDs (Issue Id)')
 @click.pass_context
-def to_jira_csv(ctx, export, mapping):
+def to_jira_csv(ctx, export, mapping, ignore, start, encoding='utf-8'):
     """
     Export the json to a CSV file that can be used to import
     into JIRA for example.
     """
-    def notify(msg):
-        print msg
-    trello = TrelloExport(export, mapping, notify)
+    trello = TrelloExport(export, mapping)
 
-    # TODO: All issues are currently stories, mark as Bug
-    # if they have the label bug
-    print "IssueType,Summary,Description,Reporter,Status, Issue ID, Parent ID"
-    for ticket in trello.to_csv_mapped():
+    ignore_list = ignore.split(',') if ignore else []
+    start_id = int(start) if start else 1
+    print "IssueType,Summary,Description,Reporter,Status, Issue Id, Parent Id"
+    for ticket in filter(lambda current: current['list'] not in ignore_list,
+                         trello.export_table_mapped(export_id_start=start_id)):
         jira_ticket = map_to_jira_ticket(ticket)
         line = [jira_ticket['IssueType'],
                 jira_ticket['Summary'],
@@ -34,10 +35,8 @@ def to_jira_csv(ctx, export, mapping):
                 jira_ticket['Status'],
                 jira_ticket['Issue ID'],
                 jira_ticket['Parent ID']]
-        line = map(unicode, line)
-        print u",".join(line)
-
-
+        line = [format_output_column(column) for column in line]
+        print u",".join(line).encode(encoding)
 
 
 def main():

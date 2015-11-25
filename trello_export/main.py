@@ -2,15 +2,17 @@
 import json
 import yaml
 import copy
+import logging
 
 
 class TrelloExport:
-    def __init__(self, export_file_path, mapping_file_path, user_msg):
-        user_msg("Loading export file from Trello from '{}'...".format(export_file_path))
+    def __init__(self, export_file_path, mapping_file_path, logger=None):
+        self.logger = logger or logging.getLogger(__name__)
+        self.logger.debug("Loading export file from Trello from '{}'...".format(export_file_path))
         with open(export_file_path) as f:
             self.data = json.load(f)
 
-        user_msg("Load mapping file from '{}'...".format(mapping_file_path))
+        self.logger.debug("Load mapping file from '{}'...".format(mapping_file_path))
         with open(mapping_file_path) as f:
             self.mapping = yaml.load(f)
             self.user_mapping = self.mapping['users']
@@ -30,15 +32,13 @@ class TrelloExport:
         self.checklists_indexed_by_id = {
             checklist['id']: checklist for checklist in self.data['checklists']}
 
-    def to_csv(self, expand_checklists=True):
+    def export_table(self, expand_checklists=True, export_id_start=1):
         """
-        Maps the file to a CSV, without applying mapping
-
-        The CSV includes all cards and all checklists
+        Transposes the json to a list of maps that can be easily
+        exported as a CSV file
         """
-        export_id = 0
+        export_id = export_id_start
         for card in self.data['cards']:
-            export_id += 1
             ret = dict()
             ret['list_id'] = card['idList']
             ret['type'] = 'card'
@@ -54,6 +54,7 @@ class TrelloExport:
             if expand_checklists:
                 for checklist_item in self.enumerate_check_items(card, ret):
                     yield checklist_item
+            export_id += 1
 
     def enumerate_check_items(self, card, card_exp):
         for checklist_id in card['idChecklists']:
@@ -68,10 +69,8 @@ class TrelloExport:
                        'list_id': card_exp['list_id'],
                        'label': ''}
 
-    def to_csv_mapped(self):
-        # TODO: Export columns conditionally, such as if
-        # label `a`, then column `x`=`b`
-        for entry in self.to_csv():
+    def export_table_mapped(self, export_id_start=1):
+        for entry in self.export_table(export_id_start=export_id_start):
             ret = copy.deepcopy(entry)
             ret['created_by'] = self.map_trello_user(entry['created_by'])
             ret['list'] = self.map_trello_list(entry['list_id'])
